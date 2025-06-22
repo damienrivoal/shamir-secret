@@ -163,43 +163,41 @@ console.log('Secret reconstitué :', recovered);
   }
 })();
 
-// === TEST EXPORT/IMPORT BASE64 ===
+// === TEST EXPORT/IMPORT BASE64 (index caché) ===
 (function() {
-  function uint16ArrayToBase64(arr) {
-    const bytes = [];
+  function shareToBase64(index, arr) {
+    const bytes = [index];
     for (let v of arr) {
       bytes.push((v >> 8) & 0xFF, v & 0xFF); // big-endian
     }
     return Buffer.from(bytes).toString('base64');
   }
-  function base64ToUint16Array(base64) {
+  function base64ToShare(base64) {
     const buf = Buffer.from(base64, 'base64');
+    const index = buf[0];
     const arr = [];
-    for (let i = 0; i < buf.length; i += 2) {
+    for (let i = 1; i < buf.length; i += 2) {
       arr.push((buf[i] << 8) | buf[i+1]);
     }
-    return arr;
+    return [index, arr];
   }
-  const phrase = "exemple BASE64 : éàç漢字🙂";
+  const phrase = "exemple BASE64 caché : éàç漢字🙂";
   const k = 3;
   const n = 5;
   const prime = 65537;
   const shares = splitSecretString(phrase, k, n, prime);
-  // Export : chaque part -> 'index:base64'
-  const exported = shares.map(([index, bytes]) => `${index}:${uint16ArrayToBase64(bytes)}`);
+  // Export : chaque part -> base64 (index caché)
+  const exported = shares.map(([index, bytes]) => shareToBase64(index, bytes));
   // Import : parser et reconvertir en [index, [entiers 16 bits]]
-  const importedShares = exported.map(str => {
-    const [indexStr, b64] = str.split(":");
-    return [parseInt(indexStr, 10), base64ToUint16Array(b64)];
-  });
+  const importedShares = exported.map(b64 => base64ToShare(b64));
   // Test reconstitution
   const selected = importedShares.slice(0, k);
   const recovered = recoverSecretString(selected, prime);
-  console.log("[BASE64] Secret original :", phrase);
-  console.log("[BASE64] Secret reconstitué :", recovered);
+  console.log("[BASE64 caché] Secret original :", phrase);
+  console.log("[BASE64 caché] Secret reconstitué :", recovered);
   if (recovered === phrase) {
-    console.log("[BASE64] \u2705 Succès : la phrase a été correctement reconstituée.");
+    console.log("[BASE64 caché] \u2705 Succès : la phrase a été correctement reconstituée.");
   } else {
-    console.error("[BASE64] \u274C Échec : la phrase reconstituée est différente !");
+    console.error("[BASE64 caché] \u274C Échec : la phrase reconstituée est différente !");
   }
 })();
