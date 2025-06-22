@@ -2,7 +2,7 @@
 
 ## Principe de base
 
-- 🔐 **Partage de secret** : Divisez un secret (texte ou entier) en plusieurs parts, de sorte qu'il faille un nombre minimal de parts pour le reconstituer.
+🔐 **Partage de secret** : Divisez un secret (texte ou entier) en plusieurs parts, de sorte qu'il faille un nombre minimal de parts pour le reconstituer.
 
 Ce projet contient deux scripts Python (`encode.py` et `decode.py`) pour implémenter le schéma de partage de secret de Shamir. Il permet de diviser un secret textuel en plusieurs parts, de telle sorte qu'un nombre minimum de parts est nécessaire pour le reconstituer.
 
