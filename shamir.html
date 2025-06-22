@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Secret de Shamir - Encodeur/Décodeur</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2em; background: #f7f7f7; }
+    h1 { color: #333; }
+    .tab { display: inline-block; margin-right: 1em; padding: 0.5em 1em; background: #eee; cursor: pointer; border-radius: 5px 5px 0 0; }
+    .tab.active { background: #fff; border-bottom: 2px solid #fff; }
+    .tab-content { background: #fff; padding: 2em; border-radius: 0 5px 5px 5px; box-shadow: 0 2px 8px #0001; }
+    .hidden { display: none; }
+    label { display: block; margin-top: 1em; }
+    input[type="number"], input[type="text"] { width: 100px; }
+    .shares-list { margin-top: 1em; }
+    .share-file { margin-bottom: 0.5em; }
+    .result { margin-top: 1em; font-weight: bold; color: #007700; }
+    .error { color: #b00; }
+  </style>
+</head>
+<body>
+  <h1>Secret de Shamir : Encodeur / Décodeur</h1>
+  <div>
+    <span class="tab active" id="tab-encode">Encoder</span>
+    <span class="tab" id="tab-decode">Décoder</span>
+  </div>
+  <div class="tab-content" id="content-encode">
+    <form id="encode-form">
+      <label>Secret à partager (texte) :
+        <input type="password" id="secret" maxlength="1000" style="width: 100%;" required autocomplete="off" autocapitalize="off" spellcheck="false">
+        <small>Compatible Unicode (accents, emojis, etc). Limite : 1000 caractères UTF-8.</small>
+        <label style="display:inline; margin-left:1em; font-weight:normal;"><input type="checkbox" id="show-secret"> Afficher</label>
+      </label>
+      <label>Nombre de parts à générer (n) :
+        <input type="number" id="n" min="2" max="10" value="5" required>
+      </label>
+      <label>Nombre minimum de parts pour reconstituer (k) :
+        <input type="number" id="k" min="2" max="10" value="3" required>
+      </label>
+      <button type="submit">Générer les parts</button>
+    </form>
+    <div class="shares-list" id="shares-list"></div>
+    <div class="result" id="encode-result"></div>
+    <div class="result" id="decode-preview"></div>
+  </div>
+  <div class="tab-content hidden" id="content-decode">
+    <form id="decode-form">
+      <label>Nombre minimum de parts requises (k) :
+        <input type="number" id="decode-k" min="2" max="10" value="3" required>
+      </label>
+      <label>Charger les fichiers de parts (au moins k) :
+        <input type="file" id="share-files" multiple accept=".json" required>
+      </label>
+      <button type="submit">Reconstituer le secret</button>
+    </form>
+    <div class="result" id="decode-result"></div>
+  </div>
+  <script src="shamir.js"></script>
+  <script>
+    // Gestion des onglets
+    const tabEncode = document.getElementById('tab-encode');
+    const tabDecode = document.getElementById('tab-decode');
+    const contentEncode = document.getElementById('content-encode');
+    const contentDecode = document.getElementById('content-decode');
+    tabEncode.onclick = () => {
+      tabEncode.classList.add('active');
+      tabDecode.classList.remove('active');
+      contentEncode.classList.remove('hidden');
+      contentDecode.classList.add('hidden');
+    };
+    tabDecode.onclick = () => {
+      tabDecode.classList.add('active');
+      tabEncode.classList.remove('active');
+      contentDecode.classList.remove('hidden');
+      contentEncode.classList.add('hidden');
+    };
+
+    // Encodage
+    document.getElementById('encode-form').onsubmit = function(e) {
+      e.preventDefault();
+      const secretInput = document.getElementById('secret');
+      const secret = secretInput.value;
+      const n = parseInt(document.getElementById('n').value, 10);
+      const k = parseInt(document.getElementById('k').value, 10);
+      const prime = 65537;
+      const resultDiv = document.getElementById('encode-result');
+      const sharesList = document.getElementById('shares-list');
+      const decodePreview = document.getElementById('decode-preview');
+      resultDiv.textContent = '';
+      sharesList.innerHTML = '';
+      decodePreview.textContent = '';
+      if (!secret) {
+        resultDiv.innerHTML = '<span class="error">Le secret ne doit pas être vide.</span>';
+        return;
+      }
+      if (k > n) {
+        resultDiv.innerHTML = '<span class="error">k doit être inférieur ou égal à n.</span>';
+        return;
+      }
+      try {
+        const shares = splitSecretString(secret, k, n, 65537);
+        shares.forEach((share, idx) => {
+          const data = JSON.stringify({ share, prime: 65537 });
+          const blob = new Blob([data], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `shamir-part-${idx+1}.json`;
+          a.textContent = `Télécharger la part #${idx+1}`;
+          a.className = 'share-file';
+          sharesList.appendChild(a);
+          sharesList.appendChild(document.createElement('br'));
+        });
+        resultDiv.textContent = `Parts générées : ${shares.length}`;
+        // Décodage immédiat pour contrôle
+        const previewShares = shares.slice(0, k);
+        let previewDecoded = '';
+        try {
+          previewDecoded = recoverSecretString(previewShares, 65537);
+          if (previewDecoded === secret) {
+            decodePreview.innerHTML = `<span style='color: #007700'>Décodage de contrôle réussi : <b>"${previewDecoded.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</b>"</span>`;
+          } else {
+            decodePreview.innerHTML = `<span class='error'>Décodage de contrôle échoué : <b>"${previewDecoded.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</b>"</span>`;
+          }
+        } catch (err) {
+          decodePreview.innerHTML = `<span class='error'>Erreur lors du décodage de contrôle : ${err.message}</span>`;
+        }
+        // Effacer le champ du secret après encodage
+        secretInput.value = '';
+      } catch (err) {
+        resultDiv.innerHTML = '<span class="error">Erreur : ' + err.message + '</span>';
+      }
+    };
+
+    // Décodage
+    document.getElementById('decode-form').onsubmit = async function(e) {
+      e.preventDefault();
+      const k = parseInt(document.getElementById('decode-k').value, 10);
+      const files = document.getElementById('share-files').files;
+      const resultDiv = document.getElementById('decode-result');
+      resultDiv.textContent = '';
+      if (files.length < k) {
+        resultDiv.innerHTML = '<span class="error">Veuillez charger au moins ' + k + ' fichiers de parts.</span>';
+        return;
+      }
+      try {
+        const shares = [];
+        let prime = null;
+        for (let i = 0; i < k; i++) {
+          const file = files[i];
+          const text = await file.text();
+          const obj = JSON.parse(text);
+          if (!prime) prime = obj.prime;
+          if (obj.prime !== prime) throw new Error('Les parts ne proviennent pas du même secret.');
+          shares.push(obj.share);
+        }
+        const secret = recoverSecretString(shares, 65537);
+        resultDiv.textContent = `Secret reconstitué : ${secret}`;
+      } catch (err) {
+        resultDiv.innerHTML = '<span class="error">Erreur : ' + err.message + '</span>';
+      }
+    };
+
+    // Afficher/masquer le mot de passe
+    document.getElementById('show-secret').onchange = function() {
+      const secretInput = document.getElementById('secret');
+      secretInput.type = this.checked ? 'text' : 'password';
+    };
+  </script>
+</body>
+</html>
