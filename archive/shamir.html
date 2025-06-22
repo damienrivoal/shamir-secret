@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Secret de Shamir - Encodeur/Décodeur</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2em; background: #f7f7f7; }
+    h1 { color: #333; }
+    .tab { display: inline-block; margin-right: 1em; padding: 0.5em 1em; background: #eee; cursor: pointer; border-radius: 5px 5px 0 0; }
+    .tab.active { background: #fff; border-bottom: 2px solid #fff; }
+    .tab-content { background: #fff; padding: 2em; border-radius: 0 5px 5px 5px; box-shadow: 0 2px 8px #0001; }
+    .hidden { display: none; }
+    label { display: block; margin-top: 1em; }
+    input[type="number"], input[type="text"] { width: 100px; }
+    .shares-list { margin-top: 1em; }
+    .share-file { margin-bottom: 0.5em; }
+    .result { margin-top: 1em; font-weight: bold; color: #007700; }
+    .error { color: #b00; }
+  </style>
+</head>
+<body>
+  <h1>Secret de Shamir : Encodeur / Décodeur</h1>
+  <div>
+    <span class="tab active" id="tab-encode">Encoder</span>
+    <span class="tab" id="tab-decode">Décoder</span>
+  </div>
+  <div class="tab-content" id="content-encode">
+    <form id="encode-form">
+      <label>Secret à partager (texte) :
+        <input type="password" id="secret" maxlength="1000" style="width: 100%;" required autocomplete="off" autocapitalize="off" spellcheck="false">
+        <small>Compatible Unicode (accents, emojis, etc). Limite : 1000 caractères UTF-8.</small>
+        <label style="display:inline; margin-left:1em; font-weight:normal;"><input type="checkbox" id="show-secret"> Afficher</label>
+      </label>
+      <label>Nombre de parts à générer (n) :
+        <input type="number" id="n" min="2" max="10" value="5" required>
+      </label>
+      <label>Nombre minimum de parts pour reconstituer (k) :
+        <input type="number" id="k" min="2" max="10" value="3" required>
+      </label>
+      <button type="submit">Générer les parts</button>
+    </form>
+    <div class="shares-list" id="shares-list"></div>
+    <div class="result" id="encode-result"></div>
+    <div class="result" id="decode-preview"></div>
+  </div>
+  <div class="tab-content hidden" id="content-decode">
+    <form id="decode-form">
+      <label>Nombre minimum de parts requises (k) :
+        <input type="number" id="decode-k" min="2" max="10" value="3" required>
+      </label>
+      <label>Charger les fichiers de parts (au moins k) :
+        <input type="file" id="share-files" multiple accept=".txt" required>
+      </label>
+      <button type="submit">Reconstituer le secret</button>
+    </form>
+    <div class="result" id="decode-result"></div>
+  </div>
+  <script>
+// === DÉBUT shamir.js inclus ===
+// Implémentation DIY du secret de Shamir (schéma (k, n))
+// Utilise l'arithmétique modulaire sur un petit nombre premier
+// PHRASE TEST : je vais acheter des fraises rouges pour cuisiner une charlotte aux fraises mais il faudrait rajouter de la chantilly pour que ce soit divin
+
+function mod(n, p) {
+  return ((n % p) + p) % p;
+}
+
+// Conversion chaîne <-> tableau d'octets (UTF-8)
+function stringToBytes(str) {
+  return new TextEncoder().encode(str);
+}
+function bytesToString(bytes) {
+  return new TextDecoder().decode(Uint8Array.from(bytes));
+}
+
+// Génère un polynôme aléatoire de degré (k-1) avec le secret comme terme constant
+function generatePolynomial(secret, k, prime) {
+  const coeffs = [secret];
+  for (let i = 1; i < k; i++) {
+    coeffs.push(Math.floor(Math.random() * prime));
+  }
+  return coeffs;
+}
+
+// Évalue le polynôme en x
+function evalPolynomial(coeffs, x, prime) {
+  let result = 0;
+  for (let i = 0; i < coeffs.length; i++) {
+    result = mod(result + coeffs[i] * Math.pow(x, i), prime);
+  }
+  return result;
+}
+
+// Génère n parts à partir d'un tableau d'octets (secretBytes)
+function splitSecretString(secretStr, k, n, prime = 65537) {
+  const secretBytes = stringToBytes(secretStr);
+  // Pour chaque octet, on génère n parts
+  // Chaque part est un tableau : [index, [octet1, octet2, ...]]
+  const shares = Array.from({length: n}, (_, i) => [i+1, []]);
+  for (let b = 0; b < secretBytes.length; b++) {
+    const poly = generatePolynomial(secretBytes[b], k, prime);
+    for (let i = 0; i < n; i++) {
+      shares[i][1].push(evalPolynomial(poly, i+1, prime));
+    }
+  }
+  return shares;
+}
+
+// Calcul de l'inverse modulaire (pour Lagrange)
+function modInverse(a, p) {
+  let t = 0, newT = 1;
+  let r = p, newR = a;
+  while (newR !== 0) {
+    let quotient = Math.floor(r / newR);
+    [t, newT] = [newT, t - quotient * newT];
+    [r, newR] = [newR, r - quotient * newR];
+  }
+  if (r > 1) throw new Error('Non inversible');
+  if (t < 0) t += p;
+  return t;
+}
+
+// Interpolation de Lagrange en x=0
+function lagrangeInterpolationAt0(points, prime) {
+  let secret = 0;
+  for (let i = 0; i < points.length; i++) {
+    let [xi, yi] = points[i];
+    let num = 1;
+    let den = 1;
+    for (let j = 0; j < points.length; j++) {
+      if (i !== j) {
+        let [xj, _] = points[j];
+        num = mod(num * -xj, prime);
+        den = mod(den * (xi - xj), prime);
+      }
+    }
+    let li = mod(num * modInverse(den, prime), prime);
+    secret = mod(secret + mod(yi * li, prime), prime);
+  }
+  return secret;
+}
+
+// Reconstitue le secret (chaîne) à partir de k parts
+function recoverSecretString(shares, prime = 65537) {
+  const len = shares[0][1].length;
+  const secretBytes = [];
+  for (let b = 0; b < len; b++) {
+    const points = shares.map(([xi, yi]) => [xi, yi[b]]);
+    const secret = lagrangeInterpolationAt0(points, prime);
+    secretBytes.push(secret);
+  }
+  return bytesToString(secretBytes);
+}
+
+// Anciennes fonctions pour compatibilité (entier)
+function splitSecret(secret, k, n, prime = 65537) {
+  return splitSecretString(String.fromCharCode(secret), k, n, prime);
+}
+function recoverSecret(shares, prime = 65537) {
+  const str = recoverSecretString(shares, prime);
+  return str.charCodeAt(0);
+}
+// === FIN shamir.js inclus ===
+
+    // Gestion des onglets
+    const tabEncode = document.getElementById('tab-encode');
+    const tabDecode = document.getElementById('tab-decode');
+    const contentEncode = document.getElementById('content-encode');
+    const contentDecode = document.getElementById('content-decode');
+    tabEncode.onclick = () => {
+      tabEncode.classList.add('active');
+      tabDecode.classList.remove('active');
+      contentEncode.classList.remove('hidden');
+      contentDecode.classList.add('hidden');
+    };
+    tabDecode.onclick = () => {
+      tabDecode.classList.add('active');
+      tabEncode.classList.remove('active');
+      contentDecode.classList.remove('hidden');
+      contentEncode.classList.add('hidden');
+    };
+
+    // Encodage
+    document.getElementById('encode-form').onsubmit = function(e) {
+      e.preventDefault();
+      const secretInput = document.getElementById('secret');
+      const secret = secretInput.value;
+      const n = parseInt(document.getElementById('n').value, 10);
+      const k = parseInt(document.getElementById('k').value, 10);
+      const prime = 65537;
+      const resultDiv = document.getElementById('encode-result');
+      const sharesList = document.getElementById('shares-list');
+      const decodePreview = document.getElementById('decode-preview');
+      resultDiv.textContent = '';
+      sharesList.innerHTML = '';
+      decodePreview.textContent = '';
+      if (!secret) {
+        resultDiv.innerHTML = '<span class="error">Le secret ne doit pas être vide.</span>';
+        return;
+      }
+      if (k > n) {
+        resultDiv.innerHTML = '<span class="error">k doit être inférieur ou égal à n.</span>';
+        return;
+      }
+      try {
+        const shares = splitSecretString(secret, k, n, 65537);
+        shares.forEach((share, idx) => {
+          const [index, bytes] = share;
+          const b64 = shareToBase64(index, bytes);
+          const data = b64;
+          const blob = new Blob([data], { type: 'text/plain' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `shamir-part-${idx+1}.txt`;
+          a.textContent = `Télécharger la part #${idx+1}`;
+          a.className = 'share-file';
+          sharesList.appendChild(a);
+          sharesList.appendChild(document.createElement('br'));
+        });
+        resultDiv.textContent = `Parts générées : ${shares.length}`;
+        // Décodage immédiat pour contrôle
+        const previewShares = shares.slice(0, k);
+        let previewDecoded = '';
+        try {
+          previewDecoded = recoverSecretString(previewShares, 65537);
+          if (previewDecoded === secret) {
+            decodePreview.innerHTML = `<span style='color: #007700'>Décodage de contrôle réussi : <b>"${previewDecoded.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</b>"</span>`;
+          } else {
+            decodePreview.innerHTML = `<span class='error'>Décodage de contrôle échoué : <b>"${previewDecoded.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</b>"</span>`;
+          }
+        } catch (err) {
+          decodePreview.innerHTML = `<span class='error'>Erreur lors du décodage de contrôle : ${err.message}</span>`;
+        }
+        // Effacer le champ du secret après encodage
+        secretInput.value = '';
+      } catch (err) {
+        resultDiv.innerHTML = '<span class="error">Erreur : ' + err.message + '</span>';
+      }
+    };
+
+    // Décodage
+    document.getElementById('decode-form').onsubmit = async function(e) {
+      e.preventDefault();
+      const k = parseInt(document.getElementById('decode-k').value, 10);
+      const files = document.getElementById('share-files').files;
+      const resultDiv = document.getElementById('decode-result');
+      resultDiv.textContent = '';
+      if (files.length < k) {
+        resultDiv.innerHTML = '<span class="error">Veuillez charger au moins ' + k + ' fichiers de parts.</span>';
+        return;
+      }
+      try {
+        const shares = [];
+        let prime = 65537;
+        for (let i = 0; i < k; i++) {
+          const file = files[i];
+          const text = (await file.text()).trim();
+          const [index, bytes] = base64ToShare(text);
+          shares.push([index, bytes]);
+        }
+        const secret = recoverSecretString(shares, prime);
+        resultDiv.textContent = `Secret reconstitué : ${secret}`;
+      } catch (err) {
+        resultDiv.innerHTML = '<span class="error">Erreur : ' + err.message + '</span>';
+      }
+    };
+
+    // Afficher/masquer le mot de passe
+    document.getElementById('show-secret').onchange = function() {
+      const secretInput = document.getElementById('secret');
+      secretInput.type = this.checked ? 'text' : 'password';
+    };
+
+    // Fonctions utilitaires base64 pour index caché + entiers 16 bits <-> chaîne
+    function shareToBase64(index, arr) {
+      // index : 1 octet, arr : tableau d'entiers (0-65535)
+      const bytes = [index];
+      for (let v of arr) {
+        bytes.push((v >> 8) & 0xFF, v & 0xFF); // big-endian
+      }
+      let binary = '';
+      for (let b of bytes) binary += String.fromCharCode(b);
+      return btoa(binary);
+    }
+    function base64ToShare(base64) {
+      const binary = atob(base64);
+      const index = binary.charCodeAt(0);
+      const arr = [];
+      for (let i = 1; i < binary.length; i += 2) {
+        arr.push((binary.charCodeAt(i) << 8) | binary.charCodeAt(i+1));
+      }
+      return [index, arr];
+    }
+  </script>
+</body>
+</html>
