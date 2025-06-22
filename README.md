@@ -1,9 +1,3 @@
-# Secret de Shamir (JavaScript)
-
-Ce projet propose une **implémentation simple du partage de secret de Shamir** (schéma \((k, n)\)) en JavaScript, avec une interface web pour encoder et décoder des secrets textuels.
-
----
-
 ## 🚀 Fonctionnalités
 
 - 🔐 **Partage de secret** : Divisez un secret (texte ou entier) en plusieurs parts, de sorte qu'il faille un nombre minimal de parts pour le reconstituer.
