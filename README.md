@@ -1,6 +1,6 @@
 # Partage de Secret de Shamir
 
-## 🚀 Fonctionnalités
+## Principe de base
 
 - 🔐 **Partage de secret** : Divisez un secret (texte ou entier) en plusieurs parts, de sorte qu'il faille un nombre minimal de parts pour le reconstituer.
 
