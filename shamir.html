@@ -49,7 +49,7 @@
         <input type="number" id="decode-k" min="2" max="10" value="3" required>
       </label>
       <label>Charger les fichiers de parts (au moins k) :
-        <input type="file" id="share-files" multiple accept=".json" required>
+        <input type="file" id="share-files" multiple accept=".txt" required>
       </label>
       <button type="submit">Reconstituer le secret</button>
     </form>
@@ -100,12 +100,14 @@
       try {
         const shares = splitSecretString(secret, k, n, 65537);
         shares.forEach((share, idx) => {
-          const data = JSON.stringify({ share, prime: 65537 });
-          const blob = new Blob([data], { type: 'application/json' });
+          const [index, bytes] = share;
+          const b64 = uint16ArrayToBase64(bytes);
+          const data = `${index}:${b64}`;
+          const blob = new Blob([data], { type: 'text/plain' });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `shamir-part-${idx+1}.json`;
+          a.download = `shamir-part-${idx+1}.txt`;
           a.textContent = `Télécharger la part #${idx+1}`;
           a.className = 'share-file';
           sharesList.appendChild(a);
@@ -145,16 +147,16 @@
       }
       try {
         const shares = [];
-        let prime = null;
+        let prime = 65537;
         for (let i = 0; i < k; i++) {
           const file = files[i];
           const text = await file.text();
-          const obj = JSON.parse(text);
-          if (!prime) prime = obj.prime;
-          if (obj.prime !== prime) throw new Error('Les parts ne proviennent pas du même secret.');
-          shares.push(obj.share);
+          const [indexStr, b64] = text.trim().split(':');
+          const index = parseInt(indexStr, 10);
+          const bytes = base64ToUint16Array(b64);
+          shares.push([index, bytes]);
         }
-        const secret = recoverSecretString(shares, 65537);
+        const secret = recoverSecretString(shares, prime);
         resultDiv.textContent = `Secret reconstitué : ${secret}`;
       } catch (err) {
         resultDiv.innerHTML = '<span class="error">Erreur : ' + err.message + '</span>';
@@ -166,6 +168,26 @@
       const secretInput = document.getElementById('secret');
       secretInput.type = this.checked ? 'text' : 'password';
     };
+
+    // Fonctions utilitaires base64 pour entiers 16 bits <-> chaîne
+    function uint16ArrayToBase64(arr) {
+      // arr : tableau d'entiers (0-65535)
+      const bytes = [];
+      for (let v of arr) {
+        bytes.push((v >> 8) & 0xFF, v & 0xFF); // big-endian
+      }
+      let binary = '';
+      for (let b of bytes) binary += String.fromCharCode(b);
+      return btoa(binary);
+    }
+    function base64ToUint16Array(base64) {
+      const binary = atob(base64);
+      const arr = [];
+      for (let i = 0; i < binary.length; i += 2) {
+        arr.push((binary.charCodeAt(i) << 8) | binary.charCodeAt(i+1));
+      }
+      return arr;
+    }
   </script>
 </body>
 </html>

@@ -136,3 +136,70 @@ console.log('Secret reconstitué :', recovered);
     console.error("\u274C Échec : la phrase reconstituée est différente !");
   }
 })();
+
+// === TEST EXPORT/IMPORT UTF-8 ===
+(function() {
+  const phrase = "exemple UTF-8 : éàç漢字🙂";
+  const k = 3;
+  const n = 5;
+  const prime = 65537;
+  const shares = splitSecretString(phrase, k, n, prime);
+  // Export : chaque part -> 'index:chaîneUTF8'
+  const exported = shares.map(([index, bytes]) => `${index}:${bytesToString(bytes)}`);
+  // Import : parser et reconvertir en [index, [octets]]
+  const importedShares = exported.map(str => {
+    const [indexStr, utf8str] = str.split(":");
+    return [parseInt(indexStr, 10), Array.from(stringToBytes(utf8str))];
+  });
+  // Test reconstitution
+  const selected = importedShares.slice(0, k);
+  const recovered = recoverSecretString(selected, prime);
+  console.log("[UTF-8] Secret original :", phrase);
+  console.log("[UTF-8] Secret reconstitué :", recovered);
+  if (recovered === phrase) {
+    console.log("[UTF-8] \u2705 Succès : la phrase a été correctement reconstituée.");
+  } else {
+    console.error("[UTF-8] \u274C Échec : la phrase reconstituée est différente !");
+  }
+})();
+
+// === TEST EXPORT/IMPORT BASE64 ===
+(function() {
+  function uint16ArrayToBase64(arr) {
+    const bytes = [];
+    for (let v of arr) {
+      bytes.push((v >> 8) & 0xFF, v & 0xFF); // big-endian
+    }
+    return Buffer.from(bytes).toString('base64');
+  }
+  function base64ToUint16Array(base64) {
+    const buf = Buffer.from(base64, 'base64');
+    const arr = [];
+    for (let i = 0; i < buf.length; i += 2) {
+      arr.push((buf[i] << 8) | buf[i+1]);
+    }
+    return arr;
+  }
+  const phrase = "exemple BASE64 : éàç漢字🙂";
+  const k = 3;
+  const n = 5;
+  const prime = 65537;
+  const shares = splitSecretString(phrase, k, n, prime);
+  // Export : chaque part -> 'index:base64'
+  const exported = shares.map(([index, bytes]) => `${index}:${uint16ArrayToBase64(bytes)}`);
+  // Import : parser et reconvertir en [index, [entiers 16 bits]]
+  const importedShares = exported.map(str => {
+    const [indexStr, b64] = str.split(":");
+    return [parseInt(indexStr, 10), base64ToUint16Array(b64)];
+  });
+  // Test reconstitution
+  const selected = importedShares.slice(0, k);
+  const recovered = recoverSecretString(selected, prime);
+  console.log("[BASE64] Secret original :", phrase);
+  console.log("[BASE64] Secret reconstitué :", recovered);
+  if (recovered === phrase) {
+    console.log("[BASE64] \u2705 Succès : la phrase a été correctement reconstituée.");
+  } else {
+    console.error("[BASE64] \u274C Échec : la phrase reconstituée est différente !");
+  }
+})();
