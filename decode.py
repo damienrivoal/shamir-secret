@@ -1,6 +1,12 @@
 from Crypto.Protocol.SecretSharing import Shamir
 import hashlib
 
+try:
+    from prompt_toolkit import prompt
+except ImportError:
+    print("Erreur : prompt_toolkit n'est pas installé. Installez-le avec 'pip install prompt_toolkit'.")
+    exit(1)
+
 # Paramètres
 n = 5  # nombre total de parts générées à l'encodage
 k = 3  # seuil minimal pour la reconstruction
@@ -9,22 +15,42 @@ k = 3  # seuil minimal pour la reconstruction
 indices = []
 all_fusions = []
 for i in range(k):
-    part_hex = input(f"Saisir une portion du secret (peu importe les majuscules/minuscules) : ").strip()
-    part_bytes = bytes.fromhex(part_hex)
-    hashval = part_bytes[:32]
-    fusion = part_bytes[32:]
-    found = False
-    for idx in range(1, n+1):
-        index_byte = idx.to_bytes(1, 'big')
-        if hashlib.sha256(index_byte + fusion).digest() == hashval:
-            print(f"Numéro de part identifié = {idx}")
-            indices.append(idx)
-            all_fusions.append(fusion)
-            found = True
-            break
-    if not found:
-        print(f"Index non reconnu (hash non valide)")
-        raise ValueError("Impossible de retrouver l'index d'une part : hash non valide")
+    previous = ""
+    while True:
+        if previous:
+            part_hex = prompt(f"Saisir une portion du secret (édition possible, Entrée pour valider) : ", default=previous).strip()
+        else:
+            part_hex = prompt(f"Saisir une portion du secret (édition possible, Entrée pour valider) : ").strip()
+        if not part_hex and previous:
+            part_hex = previous
+        else:
+            previous = part_hex
+        try:
+            part_bytes = bytes.fromhex(part_hex)
+        except Exception:
+            print("Format hexadécimal invalide. Veuillez vérifier et ressaisir :")
+            print(f"Votre saisie : {part_hex}")
+            continue
+        if len(part_bytes) < 33 or (len(part_bytes)-32) % 16 != 0:
+            print("Longueur de part invalide. Veuillez vérifier et ressaisir :")
+            print(f"Votre saisie : {part_hex}")
+            continue
+        hashval = part_bytes[:32]
+        fusion = part_bytes[32:]
+        found = False
+        for idx in range(1, n+1):
+            index_byte = idx.to_bytes(1, 'big')
+            if hashlib.sha256(index_byte + fusion).digest() == hashval:
+                print(f"Numéro de part identifié = {idx}")
+                indices.append(idx)
+                all_fusions.append(fusion)
+                found = True
+                break
+        if not found:
+            print("Index non reconnu (hash non valide). Veuillez vérifier et ressaisir :")
+            print(f"Votre saisie : {part_hex}")
+            continue
+        break
 
 # Déterminer le nombre de blocs (chaque bloc = 16 octets)
 data_len = len(all_fusions[0])
