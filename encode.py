@@ -11,8 +11,8 @@ blocs = [secret_bytes[i:i+16] for i in range(0, len(secret_bytes), 16)]
 if len(blocs[-1]) < 16:
     blocs[-1] = blocs[-1].ljust(16, b'\0')
 
-n = 5  # nombre de parts
-k = 3  # seuil
+n = 6  # nombre de parts
+k = 2  # seuil
 
 # Générer les parts pour chaque bloc
 all_shares = [[] for _ in range(n)]  # all_shares[i] = liste des parts du participant i

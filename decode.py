@@ -8,8 +8,8 @@ except ImportError:
     exit(1)
 
 # Paramètres
-n = 5  # nombre total de parts générées à l'encodage
-k = 3  # seuil minimal pour la reconstruction
+n = 6  # nombre total de parts générées à l'encodage
+k = 2  # seuil minimal pour la reconstruction
 
 # Saisie des parts fusionnées de k participants (hash + data)
 indices = []

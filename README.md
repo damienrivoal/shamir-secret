@@ -1,4 +1,55 @@
-# Partage de Secret de Shamir
+# Partage de Secret de Shamir (Python)
+
+## Installation pour débutant
+
+### 1. Installer Python
+
+- Rendez-vous sur https://www.python.org/downloads/ et téléchargez la version adaptée à votre système (Windows, Mac, Linux).
+- Suivez les instructions d'installation. Sur Windows, cochez la case "Add Python to PATH" lors de l'installation.
+
+### 2. Télécharger les fichiers du projet
+
+- Téléchargez ou clonez ce dépôt (bouton "Code" > "Download ZIP" ou via `git clone`).
+- Placez-vous dans le dossier du projet avec votre terminal ou invite de commandes.
+
+### 3. Installer les dépendances
+
+Ouvrez un terminal dans le dossier du projet et tapez :
+
+```bash
+pip install -r requirements.txt
+```
+
+Cela installera automatiquement tout ce qu'il faut pour faire fonctionner les scripts.
+
+### 4. Utiliser les scripts
+
+#### Encoder un secret
+
+```bash
+python encode.py
+```
+- Saisissez le texte à protéger.
+- Les parts générées s'affichent à l'écran.
+
+#### Décoder un secret
+
+```bash
+python decode.py
+```
+- Saisissez les parts (copier-coller, édition facilitée grâce à prompt_toolkit).
+- Le secret reconstitué s'affichera si les parts sont valides.
+
+---
+
+## Dépendances
+- Python 3.x
+- pycryptodome
+- prompt_toolkit
+
+---
+
+> _Projet éducatif et démonstratif. N'utilisez pas en production sans audit de sécurité._
 
 ## Principe de base
 
